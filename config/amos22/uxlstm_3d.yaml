@@ -1,0 +1,22 @@
+model: 'uxlstm'
+input_channels: 1
+n_stages: 5
+num_classes: 16
+features_per_stage: [32, 64, 128, 256, 512]
+num_workers: 0
+
+conv_op: 'Conv3d'
+kernel_sizes: [[3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3]]
+strides: [[1, 1, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]
+n_conv_per_stage: [2, 2, 2, 2, 2]
+n_conv_per_stage_decoder: [2, 2, 2, 2]
+conv_bias: True
+
+norm_op: 'InstanceNorm3d'
+norm_op_kwargs: {'eps': 1e-5, 'affine': True}
+dropout_op: 'Dropout3d'
+dropout_op_kwargs: {'p': 0.1}
+nonlin: 'LeakyReLU'
+nonlin_kwargs: {'inplace': True}
+deep_supervision: True
+stem_channels: 32

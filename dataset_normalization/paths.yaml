@@ -1,0 +1,11 @@
+btcv:
+  3D:
+    src_path: "../../Datasets/BTCV_"
+    dst_path: "../../Datasets/BTCV_normalized22"
+    train_percentage: 0.8
+
+amos:
+  3D:
+    src_path: "../dataset/amos22"
+    dst_path: "../dataset/amos22_normalized"
+    train_percentage: 0.8

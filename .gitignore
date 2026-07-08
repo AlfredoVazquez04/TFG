@@ -1,0 +1,12 @@
+.env_liver_segmentation*
+logs*
+exp*
+results*
+.vscode*
+graph*
+__pycache__/
+train.old*
+dataset_btcv.old*
+test*
+*.out
+*.err

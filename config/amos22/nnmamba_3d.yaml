@@ -1,0 +1,6 @@
+model: 'nnmamba'
+in_ch: 1
+channels: 32
+blocks: 3
+number_classes: 16
+num_workers: 0
