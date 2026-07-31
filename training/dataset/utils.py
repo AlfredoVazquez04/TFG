@@ -8,8 +8,9 @@ def get_dataset(args, **kwargs):
         Dataset: The dataset object.
     """    
     if args.dimension == "2d":
-        assert args.dimension == "2d" "2D dataset is not implemented yet"
-        pass
+        if args.dataset == "amos22":
+            from .dim2.dataset_amos import AMOSDataset
+            return AMOSDataset(args)
 
     else:
         if args.dataset == "btcv":
