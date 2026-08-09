@@ -105,7 +105,9 @@ class Net(pl.LightningModule):
 
         Returns:
             (torch.Tensor | monai.data.meta_tensor.MetaTensor): Output data from the network
-        """    
+        """ 
+        # print(f"Input shape: {x.shape}")
+        x = x.to(torch.float32)
         return self._model(x)
 
 
@@ -124,14 +126,15 @@ class Net(pl.LightningModule):
     
 
     def sanitize_labels(self, labels):
-        # Asegurar que es float, luego a long para índices
+        # 1. Eliminar cualquier NaN o Infinito que venga del DataLoader
+        labels = torch.nan_to_num(labels, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        # 2. Convertir a índices enteros
         labels = labels.to(torch.long)
         
-        # Si hay valores > out_channels - 1, los ponemos en 0 (fondo) o el máximo permitido
-        # Esto evita el error de "index out of bounds"
+        # 3. Restringir (clamp) drásticamente todo al rango válido [0, max_idx]
         max_idx = self.args.out_channels - 1
-        labels[labels > max_idx] = 0 
-        labels[labels < 0] = 0
+        labels = torch.clamp(labels, min=0, max=max_idx)
         
         return labels
     
@@ -147,7 +150,16 @@ class Net(pl.LightningModule):
             dict: Dictionary containing the loss and the tensorboard logs
         """        
         images, labels = batch[self.keys[0]], batch[self.keys[1]]
-        
+        images = images.contiguous()
+        labels = labels.contiguous()
+
+        # --- DEPURACIÓN AGRESIVA ---
+        if labels.max() >= self.args.out_channels or labels.min() < 0:
+            print(f"DEBUG: Labels corruptas en batch {batch_idx}")
+            print(f"Max label: {labels.max()}, Min label: {labels.min()}")
+            print(f"Esperado max: {self.args.out_channels - 1}")
+        # ---------------------------
+
         # 1. Verificar entrada
         if torch.isnan(images).any(): print("NaN en input images")
         
@@ -155,20 +167,28 @@ class Net(pl.LightningModule):
         if self.args.model == 'medsam':
             output = self._model(images, labels=labels) # Pasamos labels para entrenar
         else:
-            output = self._model(images)
+            output = self.forward(images)
+        
+        # Convertimos a tensor si es una lista o tupla antes de verificar
+        target_output = output[0] if isinstance(output, (list, tuple)) else output
                 
         # 2. Verificar salida del modelo
-        if torch.isnan(output).any():
+        if torch.isnan(target_output).any():
             print("¡ALERTA! El modelo produce NaNs tras el forward")
             return None # O lanza un error para detener
         
         labels = self.sanitize_labels(labels=labels)
-        loss = self.loss_function(output, labels)
+        # print(f"Shape de target_output: {target_output.shape}") # Debería ser [Batch, 16, H, W]
+        # print(f"Shape de labels: {labels.shape}") 
+        # print(f"Max label: {labels.max()}")
+        loss = self.loss_function(target_output, labels)
         
         # 3. Verificar pérdida
         if torch.isnan(loss):
             print("¡ALERTA! La loss es NaN")
             
+        self.training_step_outputs.append({"loss": loss.detach()})
+        
         self.log('train_loss', loss.item(), prog_bar=True)
         return loss
 
@@ -194,13 +214,16 @@ class Net(pl.LightningModule):
         
         labels = self.sanitize_labels(labels=labels)
 
+        # uncomment for 3d
+        # outputs = sliding_window_inference(
+        #     images, 
+        #     self.roi_size, 
+        #     self.inference_batch_size, 
+        #     self.forward
+        # )
         
-        outputs = sliding_window_inference(
-            images, 
-            self.roi_size, 
-            self.inference_batch_size, 
-            self.forward
-        )
+        # comment for 3d
+        outputs = self.forward(images)
 
         if isinstance(outputs, (tuple, list)):
             outputs = outputs[0]
@@ -219,7 +242,7 @@ class Net(pl.LightningModule):
         self.dice_metric(y_pred=outputs, y=labels)
         
         self.log("val_loss", loss, batch_size=1) 
-        d = {"val_loss": loss, "val_number": len(outputs)}
+        d = {"val_loss": loss.detach(), "val_number": len(outputs)}
         self.validation_step_outputs.append(d)
 
         return d
@@ -277,12 +300,16 @@ class Net(pl.LightningModule):
 
         labels = self.sanitize_labels(labels=labels)
         
-        outputs = sliding_window_inference(
-            images, 
-            self.roi_size, 
-            self.inference_batch_size, 
-            self.forward
-        )
+        # uncomment for 3d
+        # outputs = sliding_window_inference(
+        #     images, 
+        #     self.roi_size, 
+        #     self.inference_batch_size, 
+        #     self.forward
+        # )
+
+        # comment for 3d
+        outputs = self.forward(images)
 
         if isinstance(outputs, (tuple, list)):
             outputs = outputs[0]
@@ -298,7 +325,7 @@ class Net(pl.LightningModule):
             loss, 
             batch_size=1
             ) 
-        d = {"test_loss": loss, "test_number": len(outputs)}
+        d = {"test_loss": loss.detach(), "test_number": len(outputs)}
         self.test_step_outputs.append(d)
 
         return d
@@ -356,12 +383,12 @@ class MainModule:
             ValueError: Invalid mode. Choose between Train, Test or Predict
         """     
 
-        num_of_gpus = torch.cuda.device_count()
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        torch.backends.cudnn.benchmark = True
+        # num_of_gpus = torch.cuda.device_count()
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # torch.backends.cudnn.benchmark = True
         torch.set_float32_matmul_precision('high')
         #print_config()
-        print("Number of GPUs available: {}. Device used: {}".format(num_of_gpus, device))
+        # print("Number of GPUs available: {}. Device used: {}".format(num_of_gpus, device))
         #logging.basicConfig(level=logging.INFO)
 
         root_dir = '/mnt/disco4t/alfredo'
@@ -375,7 +402,7 @@ class MainModule:
             self.test(args, log_dir, root_dir=root_dir)
 
         elif args.mode == "Predict":
-            self.predict(args, log_dir, device, root_dir=root_dir)
+            self.predict(args, log_dir, "cuda:0", root_dir=root_dir)
 
         else:
             try:
@@ -648,10 +675,9 @@ def get_parser():
 
 
 if __name__ == "__main__":
-    # import torch.multiprocessing
-    # torch.multiprocessing.set_sharing_strategy('file_system')
+    import torch.multiprocessing
+    torch.multiprocessing.set_sharing_strategy('file_system')
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    torch.cuda.empty_cache()
     
     args = get_parser()
 

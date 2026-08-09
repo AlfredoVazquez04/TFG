@@ -22,11 +22,24 @@ class SequentialTrain:
                 # 'uxlstm': 1,              # finished
                 # 'nnmamba': 1 ,            # finished
                 # 'segmamba': 1,            # finished  
-                # 'medsam' : 1,             # TODO: implement
+            }
+    
+    models_2d = {
+                # 'unet': 8,                # finished      
+                # 'attention_unet': 4,      # finished  
+                # 'unet++': 8,              # finished                         
+                # 'swin_unetr': 2,          # finished
+                # 'unetr': 8,               # finished                  
+                # 'segformer': 8,           # finished
+                # 'unetr++': 8,             # finished
+                # 'uxlstm': 8,              # finished
+                'nnmamba': 4 ,            # TODO: implement
+                # 'segmamba': 4,            # TODO: implement  
             }
 
     
-    dimensions = ['3d'] # '2d',
+    # dimensions = ['3d'] # '2d',
+    dimensions = ['2d']
 
     dataset = 'amos22'
     
@@ -46,7 +59,7 @@ class SequentialTrain:
             for model in list(models.keys()):
                 
                 gpu_memory = check_gpu_memory() # Verify GPU memory
-                while gpu_memory < 15124:  # Wait until GPU memory is available  9124
+                while gpu_memory < 10024:  # Wait until GPU memory is available  9124
                     print("Need more GPU memory. Waiting...")
                     time.sleep(55)  
                     gpu_memory = check_gpu_memory()
@@ -90,10 +103,10 @@ class SequentialTrain:
             "--cache_rate", "0.0",
             "--out_channels", "16",
             "--batch_size", str(batch_size),
-            "--spatial_dims", "3",
-            "--data_dir", "/home/alfredo/data/amos22",
+            "--spatial_dims", "2",
+            "--data_dir", "/mnt/disco4t/alfredo/data/amos22_2d",
             "--trainmode", "init",
-            "--roi_size", "96", "96", "96",
+            "--roi_size", "512", "512",
             "--dataset", str(dataset),
             "--dimension", str(dimension)
 
