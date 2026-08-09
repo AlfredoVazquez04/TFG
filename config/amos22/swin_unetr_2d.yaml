@@ -13,7 +13,7 @@ attn_drop_rate: 0.0
 dropout_path_rate: 0.0
 normalize: True
 use_checkpoint: False
-spatial_dims: 3
+spatial_dims: 2
 downsample: "merging"
 use_v2: False
-img_size: [96, 96, 96]
+img_size: [512, 512]

@@ -1,0 +1,14 @@
+model: "unet++" 
+
+spatial_dims: 2
+in_channels: 1
+out_channels: 16
+features: [32, 32, 64, 128, 256, 32]
+num_workers: 0
+
+deep_supervision: True
+act: ["LeakyReLU", {"negative_slope": 0.1, "inplace": True}]
+norm: ["instance", {"affine": True}]
+bias: True
+dropout: 0.0
+upsample: "deconv"
