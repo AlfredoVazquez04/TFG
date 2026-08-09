@@ -291,8 +291,8 @@ def get_model(args, pretrain=False):
             )
         
         elif args.model == 'segformer':
-            from .dim2 import SegFormer3D
-            return SegFormer3D(
+            from .dim2 import SegFormer2D
+            return SegFormer2D(
                 in_channels=args.in_channels,
                 num_classes=args.out_channels,
                 sr_ratios=args.sr_ratios,
@@ -306,11 +306,14 @@ def get_model(args, pretrain=False):
                 decoder_head_embedding_dim=args.decoder_head_embedding_dim,
                 decoder_dropout=args.decoder_dropout,
             )
-                
+          
         elif args.model == 'uxlstm':
             from .dim2 import UXlstmBot
             norm_cls = getattr(nn, args.norm_op.split('.')[-1]) 
             nonlin_cls = getattr(nn, args.nonlin.split('.')[-1])
+            
+            if 'eps' in args.norm_op_kwargs:
+                args.norm_op_kwargs['eps'] = float(args.norm_op_kwargs['eps'])
             
             return UXlstmBot(
                 input_channels=args.input_channels,
@@ -349,6 +352,7 @@ def get_model(args, pretrain=False):
                 dims=args.dims,
                 conv_op=args.conv_op,
                 do_ds=args.do_ds,
+                spatial_dims=args.spatial_dims,
             )
         
         
