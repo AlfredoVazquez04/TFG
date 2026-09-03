@@ -2,10 +2,13 @@ import os
 
 import numpy as np
 from typing import Union, List
+from thop import profile, clever_format
 
 import plotly.graph_objs as go
 import nibabel as nib
+import torch
 from plotly.subplots import make_subplots
+from scipy.stats import shapiro, wilcoxon
 # from concurrent.futures import ThreadPoolExecutor # TODO more faster
 from monai.data import Dataset
 from monai.transforms import (
@@ -29,14 +32,11 @@ from scipy.ndimage import (
 class MetricResult:
     """ Class to store the results of the metrics. With this class, you can compute the mean of all classes and plot the results.
     """
-    metrics = ["DSC", "NSD", "MASD", "HD", "RVD"]
-    range_metrics = {"DSC": [0, 1],
-                     "NSD": [0, 1],
-                     "MASD": [0, np.inf],
-                     "HD": [0, np.inf],
-                     "RVD": [-1, 1]
-    }
-
+    metrics = ["DSC", "HD"]
+    range_metrics = {
+        "DSC": [0, 1],
+        "HD": [0, np.inf],
+    }  
 
     def __init__(self, result):
         """Function to initialize the class.
@@ -410,8 +410,8 @@ class RemovirtMetrics(VolumeVisualization):
             raise ValueError("In development.")
         else:
             raise ValueError("The input for the prediction is not valid.")
-        
-        return self.__array2nifty(gt)[0].astype(int), self.__array2nifty(pred)[0].astype(int)  
+
+        return gt.astype(int), pred.astype(int)  
 
 
     def compute_all_classes_detect(self, gt_all_classes, pred_all_classes, spec_class=None, to_check=False):
@@ -436,10 +436,7 @@ class RemovirtMetrics(VolumeVisualization):
                 pred[pred_all_classes == class_detect] = 1
                 result[self.classes[class_detect]] = {
                         "DSC": self.dsc(gt, pred),
-                        "NSD": self.nsd(gt, pred),
-                        "MASD": self.masd(gt, pred),
-                        "HD": self.hd(gt, pred),
-                        "RVD": self.rvd(gt, pred)
+                        "HD": self.hd(gt, pred)
                     }
 
                 self.__min_dist_gt_pred = None # To reset for next MASD and HD measures
@@ -452,10 +449,7 @@ class RemovirtMetrics(VolumeVisualization):
             pred[pred_all_classes == spec_class] = 1
             return MetricResult({
                 "DSC": self.dsc(gt, pred),
-                "NSD": self.nsd(gt, pred),
-                "MASD": self.masd(gt, pred),
                 "HD": self.hd(gt, pred),
-                "RVD": self.rvd(gt, pred)
             })
         
         else:
@@ -463,10 +457,7 @@ class RemovirtMetrics(VolumeVisualization):
             pred = pred_all_classes
             return MetricResult({
                 "DSC": self.dsc(gt, pred),
-                "NSD": self.nsd(gt, pred),
-                "MASD": self.masd(gt, pred),
                 "HD": self.hd(gt, pred),
-                "RVD": self.rvd(gt, pred)
             })
 
 
@@ -484,47 +475,6 @@ class RemovirtMetrics(VolumeVisualization):
 
         return (2 * np.abs(np.sum(gt * pred))) \
                 / (np.abs(np.sum(gt)) + np.abs(np.sum(pred))) if np.sum(gt) != 0 else None
-    
-
-    def rvd(self, gt, pred):
-        """Function to get the Relative Volume Difference (RVD) metric.
-
-        Args:
-            gt (numpy.ndarray | ): Ground Truth
-            pred (numpy.ndarray | ): Prediction
-        
-        Returns:
-            float: The RVD metric
-        """
-        if np.sum(gt) == 0: return None
-
-        gt = gt.astype(np.float64)
-        pred = pred.astype(np.float64)
-        return (np.sum(gt) - np.sum(pred)) / np.sum(gt) if np.sum(gt) != 0 else None
-
-
-    def masd(self, gt, pred):
-        """Function to get the Mean Average Surface Distance (MASD) metric.
-
-        Args:
-            gt (numpy.ndarray): Ground Truth
-            pred (numpy.ndarray): Prediction
-
-        Returns:
-            float: The MASD metric
-        """ 
-        if np.sum(gt) == 0: return None
-        
-        if self.__min_dist_gt_pred is None:
-            self.__set_aux_2_masd_hd(gt, pred)
-        
-        sds_A_to_B = np.ravel(self.__min_dist_gt_pred[self.__s_prime != 0])
-        sds_B_to_A = np.ravel(self.__min_dist_pred_gt[self.__s != 0])
-
-        
-        return (0.5 * ((sds_A_to_B.sum() / len(sds_A_to_B)) 
-                        + (sds_B_to_A.sum() / len(sds_B_to_A)))) if len(sds_A_to_B) != 0 and len(sds_B_to_A) != 0 else None
-
 
     def hd(self, gt, pred):
         """Function to get the Hausdorff Distance (HD) metric.
@@ -545,38 +495,6 @@ class RemovirtMetrics(VolumeVisualization):
         return np.concatenate([
             np.ravel(self.__min_dist_gt_pred[self.__s_prime != 0]), 
             np.ravel(self.__min_dist_pred_gt[self.__s != 0])]).max() if np.sum(gt) != 0 else None
-    
-
-    def nsd(self, gt, pred, tau=2):  
-        """Function to get the Normalize Surface Distance (NSD) metric. 
-        The NSD is a measure of the average distance between the surfaces of the ground truth and the prediction.
-    
-
-        Args:
-            gt (numpy.ndarray): Ground Truth
-            pred (numpy.ndarray): Prediction
-            tau (int, optional): Tolerance parameter to represent the degree of strictness for what constitutes a correct boundary. Defaults to 2.
-
-        Returns:
-            float: The NSD metric
-        """  
-        if np.sum(gt) == 0: return None
-        
-        mask_true_boundary = self.__get_boundary(gt)
-        mask_true_border_region = self.__get_boundary(mask=gt, 
-                                                      border_region=True, 
-                                                      tau=tau)
-
-        mask_pred_boundary = self.__get_boundary(pred)
-        mask_pred_border_region = self.__get_boundary(mask=pred, 
-                                                      border_region=True, 
-                                                      tau=tau)
-
-        intersection_true_pred = np.sum(mask_true_boundary * mask_pred_border_region)
-        intersection_pred_true =  np.sum(mask_pred_boundary * mask_true_border_region)
-        smooth = 1e-7
-        return ((np.abs(intersection_true_pred) + np.abs(intersection_pred_true) + smooth) 
-               / (np.abs(np.sum(mask_true_boundary)) + np.abs(np.sum(mask_pred_boundary)) + smooth))
 
 
     def __load_from_file(self, path):
@@ -633,6 +551,68 @@ class RemovirtMetrics(VolumeVisualization):
         img = nib.Nifti1Image(array, affine=np.eye(4))
         return img.get_fdata(), img.header.get_zooms()
 
+
+class EfficiencyMetrics:
+    def __call__(self, model, size=[256,256,128], dimension=3, batch_size=1, device='cuda'):
+        params = sum(p.numel() for p in model.parameters())
+        if dimension==3:
+            input = torch.rand(batch_size, 1, size[0], size[1], size[2]).to(device=device)
+        else:
+            input = torch.rand(batch_size, 1, size[0], size[1]).to(device=device)
+
+        macs, _ = profile(model, inputs=(input, ), verbose=False)
+
+        flops = 2 * macs
+        flops_formated, params_formated = clever_format([flops, params], "%.3f")
+
+        return {
+            "params": params_formated,
+            "flops": flops_formated
+        }
+
+
+
+class StatisticsMetrics:
+    def __init__(self, alpha=0.05):
+        self.alpha = alpha
+
+    def _check_normality(self, data, model_name):
+        stat, p_value = shapiro(data)
+        is_normal = p_value > self.alpha
+        
+        print(f"--- Shapiro-Wilk Test: ({model_name}) ---")
+        print(f"Statistical: {stat:.4f}, p-value: {p_value:.4f}")
+        if is_normal:
+            print(f"Normality is accepted (p > {self.alpha}).\n")
+        else:
+            print(f"Normality is rejected (p <= {self.alpha}).\n")
+            
+        return is_normal
+
+    def __call__(self, data_2d, data_3d, metric_name="DSC"):
+        data_2d = np.array(data_2d)
+        data_3d = np.array(data_3d)
+        
+        if len(data_2d) != len(data_3d):
+            raise ValueError("The len of 2d data and 3d data are not equal.")
+
+        print(f" Statistic Validation for ({metric_name}) ")
+
+        self._check_normality(data_2d, "Best 2D model")
+        self._check_normality(data_3d, "Best 3d model")
+
+        print("--- Test Wicoxon (best 2D model vs 3D best model) ---")
+        try:
+            stat, p_value = wilcoxon(data_2d, data_3d)
+            print(f"Statistical: {stat:.4f}, p-value: {p_value:.4f}")
+
+            if p_value < self.alpha:
+                print(f"\n[!] Result: there are significant statistical diference (p < {self.alpha}).")
+            else:
+                print(f"\n[-] Result: none significant statistical diference (p >= {self.alpha}).")
+        except ValueError as e:
+            print(f"Error: {e}")
+            
 
 if "__main__" == __name__:
 
