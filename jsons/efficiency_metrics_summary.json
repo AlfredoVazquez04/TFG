@@ -1,0 +1,215 @@
+{
+    "dataset_target": "amos22",
+    "metrics_summary": {
+        "swin_unetr_2d": {
+            "dimensions": "2D",
+            "input_size": [
+                512,
+                512
+            ],
+            "batch_size": 8,
+            "flops_formatted": "1.211T",
+            "params_formatted": "25.139M"
+        },
+        "unet_2d": {
+            "dimensions": "2D",
+            "input_size": [
+                512,
+                512
+            ],
+            "batch_size": 8,
+            "flops_formatted": "342.289G",
+            "params_formatted": "6.511M"
+        },
+        "unetr_2d": {
+            "dimensions": "2D",
+            "input_size": [
+                512,
+                512
+            ],
+            "batch_size": 8,
+            "flops_formatted": "1.683T",
+            "params_formatted": "87.905M"
+        },
+        "attention_unet_2d": {
+            "dimensions": "2D",
+            "input_size": [
+                512,
+                512
+            ],
+            "batch_size": 8,
+            "flops_formatted": "176.393G",
+            "params_formatted": "494.228K"
+        },
+        "unet++_2d": {
+            "dimensions": "2D",
+            "input_size": [
+                512,
+                512
+            ],
+            "batch_size": 8,
+            "flops_formatted": "1.147T",
+            "params_formatted": "2.412M"
+        },
+        "segformer_2d": {
+            "dimensions": "2D",
+            "input_size": [
+                512,
+                512
+            ],
+            "batch_size": 8,
+            "flops_formatted": "110.704G",
+            "params_formatted": "3.323M"
+        },
+        "unetr++_2d": {
+            "dimensions": "2D",
+            "input_size": [
+                512,
+                512
+            ],
+            "batch_size": 8,
+            "flops_formatted": "591.042G",
+            "params_formatted": "9.201M"
+        },
+        "uxlstm_2d": {
+            "dimensions": "2D",
+            "input_size": [
+                512,
+                512
+            ],
+            "batch_size": 8,
+            "flops_formatted": "7.910T",
+            "params_formatted": "11.186M"
+        },
+        "nnmamba_2d": {
+            "dimensions": "2D",
+            "input_size": [
+                512,
+                512
+            ],
+            "batch_size": 8,
+            "flops_formatted": "661.019G",
+            "params_formatted": "5.863M"
+        },
+        "segmamba_2d": {
+            "dimensions": "2D",
+            "input_size": [
+                256,
+                256
+            ],
+            "batch_size": 8,
+            "flops_formatted": "637.095G",
+            "params_formatted": "25.981M"
+        },
+        "swin_unetr_3d": {
+            "dimensions": "3D",
+            "input_size": [
+                96,
+                96,
+                96
+            ],
+            "batch_size": 1,
+            "flops_formatted": "659.851G",
+            "params_formatted": "62.187M"
+        },
+        "unet_3d": {
+            "dimensions": "3D",
+            "input_size": [
+                96,
+                96,
+                96
+            ],
+            "batch_size": 1,
+            "flops_formatted": "139.826G",
+            "params_formatted": "19.253M"
+        },
+        "unetr_3d": {
+            "dimensions": "3D",
+            "input_size": [
+                96,
+                96,
+                96
+            ],
+            "batch_size": 1,
+            "flops_formatted": "165.467G",
+            "params_formatted": "92.784M"
+        },
+        "attention_unet_3d": {
+            "dimensions": "3D",
+            "input_size": [
+                96,
+                96,
+                96
+            ],
+            "batch_size": 1,
+            "flops_formatted": "116.644G",
+            "params_formatted": "1.467M"
+        },
+        "unet++_3d": {
+            "dimensions": "3D",
+            "input_size": [
+                96,
+                96,
+                96
+            ],
+            "batch_size": 1,
+            "flops_formatted": "1.130T",
+            "params_formatted": "6.982M"
+        },
+        "segformer_3d": {
+            "dimensions": "3D",
+            "input_size": [
+                96,
+                96,
+                96
+            ],
+            "batch_size": 1,
+            "flops_formatted": "10.017G",
+            "params_formatted": "4.496M"
+        },
+        "unetr++_3d": {
+            "dimensions": "3D",
+            "input_size": [
+                96,
+                96,
+                96
+            ],
+            "batch_size": 1,
+            "flops_formatted": "110.960G",
+            "params_formatted": "42.949M"
+        },
+        "uxlstm_3d": {
+            "dimensions": "3D",
+            "input_size": [
+                96,
+                96,
+                96
+            ],
+            "batch_size": 1,
+            "flops_formatted": "5.840T",
+            "params_formatted": "29.261M"
+        },
+        "nnmamba_3d": {
+            "dimensions": "3D",
+            "input_size": [
+                96,
+                96,
+                96
+            ],
+            "batch_size": 1,
+            "flops_formatted": "137.913G",
+            "params_formatted": "15.960M"
+        },
+        "segmamba_3d": {
+            "dimensions": "3D",
+            "input_size": [
+                96,
+                96,
+                96
+            ],
+            "batch_size": 1,
+            "flops_formatted": "1.318T",
+            "params_formatted": "66.851M"
+        }
+    }
+}
