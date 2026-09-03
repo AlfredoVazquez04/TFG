@@ -126,7 +126,7 @@ class AMOSDataset(pl.LightningDataModule):
             ),
             Resized(
                 keys=self.keys,
-                spatial_size=(512, 512), # Redimensión en 2D
+                spatial_size=tuple(self.args.roi_size[:2]), # Redimensión en 2D
                 mode=("bilinear", "nearest"),
             )
             ]
@@ -160,7 +160,7 @@ class AMOSDataset(pl.LightningDataModule):
             ),
             Resized(
                 keys=self.keys,
-                spatial_size=(512, 512), # Redimensión en 2D
+                spatial_size=tuple(self.args.roi_size[:2]), # Redimensión en 2D
                 mode=("bilinear", "nearest"),
             ),
             # RandCropByPosNegLabeld(
@@ -213,6 +213,11 @@ class AMOSDataset(pl.LightningDataModule):
                     b_min=0.0,
                     b_max=1.0,
                     clip=True,
+                ),
+                Resized(
+                    keys=self.keys[0],
+                    spatial_size=self.args.roi_size[:2],
+                    mode=("bilinear"),
                 ),
             ]
         )
@@ -349,7 +354,7 @@ class AMOSDataset(pl.LightningDataModule):
         """ 
         if folders_img_lbl:
             data_images = sorted(
-                glob.glob(os.path.join(self.args.data_dir, "imagesTs", "*.npy")))
+                glob.glob(os.path.join(self.args.data_dir, "imagesVa", "*.npy")))
             
             return data_images
             

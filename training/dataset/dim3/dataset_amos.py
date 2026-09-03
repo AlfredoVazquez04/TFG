@@ -257,6 +257,12 @@ class AMOSDataset(pl.LightningDataModule):
                     b_max=1.0,
                     clip=True,
                 ),
+                Resized(
+                    keys=self.keys[0],
+                    spatial_size=(256, 256, 128),
+                    mode=("bilinear"),
+                ),
+
                 # CropForegroundd(
                 #     allow_smaller=False, 
                 #     keys=self.keys[0], 
@@ -403,7 +409,7 @@ class AMOSDataset(pl.LightningDataModule):
 
         if folders_img_lbl:
             data_images = sorted(
-                glob.glob(os.path.join(self.args.data_dir, "imagesTs", "*.nii.gz")))
+                glob.glob(os.path.join(self.args.data_dir, "imagesVa", "*.nii.gz")))
             
             return data_images
 
