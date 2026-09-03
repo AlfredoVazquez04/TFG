@@ -12,34 +12,33 @@ from utils import check_gpu_memory
 class SequentialTrain:
 
     models_3d = {
-                # 'swin_unetr': 1,          # finished
-                # 'unet': 1,                # finished
-                # 'unetr': 1,               # finished
-                # 'attention_unet': 1,      # finished
-                # 'unet++': 1,              # finished               
-                # 'segformer': 1,           # finished 
-                # 'unetr++': 1,             # finished
-                # 'uxlstm': 1,              # finished
-                # 'nnmamba': 1 ,            # finished
-                # 'segmamba': 1,            # finished  
+                'swin_unetr': 1,         
+                'unet': 1,               
+                'unetr': 1,              
+                'attention_unet': 1,     
+                'unet++': 1,                            
+                'segformer': 1,           
+                'unetr++': 1,            
+                'uxlstm': 1,             
+                'nnmamba': 1 ,           
+                'segmamba': 1,             
             }
     
     models_2d = {
-                # 'unet': 8,                # finished      
-                # 'attention_unet': 4,      # finished  
-                # 'unet++': 8,              # finished                         
-                # 'swin_unetr': 2,          # finished
-                # 'unetr': 8,               # finished                  
-                # 'segformer': 8,           # finished
-                # 'unetr++': 8,             # finished
-                # 'uxlstm': 8,              # finished
-                'nnmamba': 4 ,            # TODO: implement
-                # 'segmamba': 4,            # TODO: implement  
+                'unet': 8,                      
+                'attention_unet': 4,        
+                'unet++': 8,                                       
+                'swin_unetr': 2,          
+                'unetr': 8,                                 
+                'segformer': 8,           
+                'unetr++': 8,             
+                'uxlstm': 8,              
+                'nnmamba': 4 ,            
+                'segmamba': 4,             
             }
 
     
-    # dimensions = ['3d'] # '2d',
-    dimensions = ['2d']
+    dimensions = ['3d'] # '2d/3d',
 
     dataset = 'amos22'
     
@@ -103,10 +102,10 @@ class SequentialTrain:
             "--cache_rate", "0.0",
             "--out_channels", "16",
             "--batch_size", str(batch_size),
-            "--spatial_dims", "2",
-            "--data_dir", "/mnt/disco4t/alfredo/data/amos22_2d",
+            "--spatial_dims", "3",
+            "--data_dir", "/mnt/disco4t/alfredo/data/amos22",
             "--trainmode", "init",
-            "--roi_size", "512", "512",
+            "--roi_size", "96", "96", "96", # 96x96x96 or 512x512
             "--dataset", str(dataset),
             "--dimension", str(dimension)
 

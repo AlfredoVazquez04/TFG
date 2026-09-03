@@ -16,6 +16,7 @@ import nibabel as nib
 
 
 import torch
+torch.autograd.set_detect_anomaly(True, check_nan=True)
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping
 
@@ -32,6 +33,7 @@ from monai.data import (
     CacheDataset,
     decollate_batch,
     list_data_collate,
+    MetaTensor,
 )
 
 
@@ -119,24 +121,36 @@ class Net(pl.LightningModule):
         """        
         optimizer = torch.optim.AdamW(
             self._model.parameters(), 
-            lr=1e-4, 
-            weight_decay=1e-5
+            lr=1e-5, 
+            weight_decay=1e-4
         )
         return optimizer 
     
 
-    def sanitize_labels(self, labels):
-        # 1. Eliminar cualquier NaN o Infinito que venga del DataLoader
+    def sanitize_labels(self, labels, num_classes):
+        """
+        Function to make sure that the labels are in the range (0, num classes)
+
+        Args:
+            labels (array, tensor): tensor/array with the labels
+            num_classes (int): max number of classes of the dataset
+
+        Returns:
+            _type_: _description_
+        """
+        if hasattr(labels, "as_tensor"):
+            labels = labels.as_tensor()
+            
         labels = torch.nan_to_num(labels, nan=0.0, posinf=0.0, neginf=0.0)
-        
-        # 2. Convertir a índices enteros
+
         labels = labels.to(torch.long)
         
-        # 3. Restringir (clamp) drásticamente todo al rango válido [0, max_idx]
-        max_idx = self.args.out_channels - 1
-        labels = torch.clamp(labels, min=0, max=max_idx)
+        if len(labels.shape) == 3:
+            labels = labels.unsqueeze(1)
+            
+        labels = torch.clamp(labels, min=0) % num_classes
         
-        return labels
+        return labels.contiguous()
     
 
     def training_step(self, batch, batch_idx):
@@ -150,45 +164,26 @@ class Net(pl.LightningModule):
             dict: Dictionary containing the loss and the tensorboard logs
         """        
         images, labels = batch[self.keys[0]], batch[self.keys[1]]
-        images = images.contiguous()
+        images = torch.nan_to_num(images, nan=0.0, posinf=0.0, neginf=0.0).contiguous()
         labels = labels.contiguous()
 
-        # --- DEPURACIÓN AGRESIVA ---
-        if labels.max() >= self.args.out_channels or labels.min() < 0:
-            print(f"DEBUG: Labels corruptas en batch {batch_idx}")
-            print(f"Max label: {labels.max()}, Min label: {labels.min()}")
-            print(f"Esperado max: {self.args.out_channels - 1}")
-        # ---------------------------
-
-        # 1. Verificar entrada
-        if torch.isnan(images).any(): print("NaN en input images")
+        if torch.isnan(images).any(): print("NaN in input images")
         
-        # En training_step de tu Net(pl.LightningModule):
-        if self.args.model == 'medsam':
-            output = self._model(images, labels=labels) # Pasamos labels para entrenar
-        else:
-            output = self.forward(images)
+        output = self.forward(images)
         
-        # Convertimos a tensor si es una lista o tupla antes de verificar
         target_output = output[0] if isinstance(output, (list, tuple)) else output
                 
-        # 2. Verificar salida del modelo
         if torch.isnan(target_output).any():
-            print("¡ALERTA! El modelo produce NaNs tras el forward")
-            return None # O lanza un error para detener
+            return None #
         
-        labels = self.sanitize_labels(labels=labels)
-        # print(f"Shape de target_output: {target_output.shape}") # Debería ser [Batch, 16, H, W]
-        # print(f"Shape de labels: {labels.shape}") 
-        # print(f"Max label: {labels.max()}")
+        num_canales_reales = target_output.shape[1] if hasattr(target_output, 'shape') else output.shape[1]
+        labels = self.sanitize_labels(labels=labels, num_classes=num_canales_reales)
         loss = self.loss_function(target_output, labels)
         
-        # 3. Verificar pérdida
         if torch.isnan(loss):
-            print("¡ALERTA! La loss es NaN")
+            print("WARN! the loss is NaN")
             
         self.training_step_outputs.append({"loss": loss.detach()})
-        
         self.log('train_loss', loss.item(), prog_bar=True)
         return loss
 
@@ -210,29 +205,22 @@ class Net(pl.LightningModule):
         Returns:
             dict: Dictionary containing the loss and the tensorboard logs
         """  
-        images, labels = batch[self.keys[0]], batch[self.keys[1]]
-        
-        labels = self.sanitize_labels(labels=labels)
+        images, labels = batch[self.keys[0]], batch[self.keys[1]]        
+        images = torch.nan_to_num(images, nan=0.0, posinf=0.0, neginf=0.0).contiguous()
+        labels = labels.contiguous()
 
-        # uncomment for 3d
-        # outputs = sliding_window_inference(
-        #     images, 
-        #     self.roi_size, 
-        #     self.inference_batch_size, 
-        #     self.forward
-        # )
-        
-        # comment for 3d
-        outputs = self.forward(images)
+        outputs = sliding_window_inference(
+            images, 
+            self.roi_size, 
+            self.inference_batch_size, 
+            self.forward
+        )
 
         if isinstance(outputs, (tuple, list)):
             outputs = outputs[0]
             
-        if labels.max() >= self.args.out_channels or labels.min() < 0:
-            print(f"CRÍTICO: Etiquetas detectadas con valores fuera de rango [0, {self.args.out_channels-1}]")
-            print(f"Min: {labels.min()}, Max: {labels.max()}")
-            # Esto detendrá el programa y te mostrará dónde ocurre antes de que explote CUDA
-            raise ValueError("Etiquetas corruptas detectadas.")
+        num_chan = outputs.shape[1] if hasattr(outputs, 'shape') else outputs.shape[1]
+        labels = self.sanitize_labels(labels=labels, num_classes=num_chan)
 
         loss = self.loss_function(outputs, labels)
 
@@ -297,22 +285,22 @@ class Net(pl.LightningModule):
             dict: Dictionary containing the loss and the tensorboard logs
         """  
         images, labels = batch["image"], batch["label"]
-
-        labels = self.sanitize_labels(labels=labels)
+        images = torch.nan_to_num(images, nan=0.0, posinf=0.0, neginf=0.0).contiguous()
+        labels = labels.contiguous()
+        labels = self.sanitize_labels(labels=labels, num_classes=args.out_channels)
         
-        # uncomment for 3d
-        # outputs = sliding_window_inference(
-        #     images, 
-        #     self.roi_size, 
-        #     self.inference_batch_size, 
-        #     self.forward
-        # )
-
-        # comment for 3d
-        outputs = self.forward(images)
+        outputs = sliding_window_inference(
+            images, 
+            self.roi_size, 
+            self.inference_batch_size, 
+            self.forward
+        )
 
         if isinstance(outputs, (tuple, list)):
             outputs = outputs[0]
+            
+        num_chan = outputs.shape[1] if hasattr(outputs, 'shape') else outputs.shape[1]
+        labels = torch.clamp(labels.long(), min=0, max=num_chan - 1)
             
         loss = self.loss_function(outputs, labels)
         outputs = [self.post_pred(i) for i in decollate_batch(outputs)]
@@ -320,11 +308,7 @@ class Net(pl.LightningModule):
 
         self.dice_metric_test(y_pred=outputs, y=labels)
 
-        self.log(
-            "test_loss", 
-            loss, 
-            batch_size=1
-            ) 
+        self.log("test_loss", loss, batch_size=1) 
         d = {"test_loss": loss.detach(), "test_number": len(outputs)}
         self.test_step_outputs.append(d)
 
@@ -388,7 +372,7 @@ class MainModule:
         # torch.backends.cudnn.benchmark = True
         torch.set_float32_matmul_precision('high')
         #print_config()
-        # print("Number of GPUs available: {}. Device used: {}".format(num_of_gpus, device))
+        #print("Number of GPUs available: {}. Device used: {}".format(num_of_gpus, device))
         #logging.basicConfig(level=logging.INFO)
 
         root_dir = '/mnt/disco4t/alfredo'
@@ -402,7 +386,8 @@ class MainModule:
             self.test(args, log_dir, root_dir=root_dir)
 
         elif args.mode == "Predict":
-            self.predict(args, log_dir, "cuda:0", root_dir=root_dir)
+            device = "cuda:0" if torch.cuda.is_available() else "cpu"
+            self.predict(args, log_dir, device, root_dir=root_dir)
 
         else:
             try:
@@ -456,10 +441,10 @@ class MainModule:
         logging.info("Preparing trainer")
         trainer = pl.Trainer(
             accelerator="gpu", 
-            precision="32-true",
+            precision="32",
             devices=[0],
             max_epochs=net.max_epochs,
-            gradient_clip_val=1.0,         
+            gradient_clip_val=0.1,         
             logger=tb_logger,
             enable_checkpointing=True,
             num_sanity_val_steps=1,
@@ -537,10 +522,9 @@ class MainModule:
 
         logging.info("Loading Model")
         net = Net(args)
-        log_dir = os.path.join(log_dir, 'lightning_logs')
+        log_dir_ckpt = os.path.join(log_dir, 'lightning_logs')
         ckpt_path = get_latest_run_version_ckpt_epoch_no(
-            lightning_logs_dir=log_dir, 
-            run_version=args.run_version
+            lightning_logs_dir=log_dir_ckpt, 
             )
         ckpt_model = Net.load_from_checkpoint(checkpoint_path=ckpt_path)
 
@@ -553,7 +537,7 @@ class MainModule:
         pred_ds = CacheDataset(
             data=pred_files, 
             transform=pred_transforms,
-            cache_rate=1.0, 
+            cache_rate=args.cache_rate, 
             num_workers=args.num_workers,
         )
         
@@ -561,7 +545,8 @@ class MainModule:
             pred_ds, 
             batch_size=args.inference_batch_size, 
             num_workers=args.num_workers,
-            collate_fn=list_data_collate,)
+            collate_fn=list_data_collate,
+        )
 
         ckpt_model.freeze()
         ckpt_model.eval()
@@ -578,35 +563,71 @@ class MainModule:
                     overlap=0.8
                 )
 
-                best_pred = torch.argmax(pred_outputs, dim=1).detach().cpu()[0, ...]
+                if isinstance(pred_outputs, tuple):
+                    pred_outputs = pred_outputs[0]
+
+                best_pred = torch.argmax(pred_outputs, dim=1, keepdim=True).detach().cpu()[0]
+                
+                best_pred = best_pred.to(torch.float32)
+
+                input_tensor = pred_data[net.keys[0]][0]
+
+                safe_operations = []
+                for op in input_tensor.applied_operations:
+                    op_copy = op.copy()
+                    class_name = op_copy.get('class', '')
+                    
+                    if any(x in class_name for x in ['Scale', 'Normalize', 'Shift', 'Intensity']):
+                        continue
+                        
+                    if 'extra_info' in op_copy and 'mode' in op_copy['extra_info']:
+                        op_copy['extra_info']['mode'] = 'nearest'
+                        
+                    safe_operations.append(op_copy)
+
+                best_pred_meta = MetaTensor(
+                    best_pred, 
+                    meta=input_tensor.meta, 
+                    applied_operations=safe_operations
+                )
 
                 best_pred_reshape = post_transform.inverse(
-                    {net.keys[0]: best_pred.unsqueeze(0)} 
-                    )
+                    {net.keys[0]: best_pred_meta} 
+                )
                 
                 name = os.path.split(
                     pred_files[i][net.keys[0]]
-                    )[-1].split('.')[0]
+                )[-1].split('.')[0]
                 
-                sample_stack(
-                    pred_data[net.keys[0]][0, 0, ...], 
-                    title=name, 
-                    show= args.show,
-                    path_out_images=args.path_prediction+args.model+"_"+args.dimension+"/"
+                out_path = os.path.join(args.path_prediction, f"{args.model}_{args.dimension}")
+                os.makedirs(out_path, exist_ok=True)
+                
+                final_pred_tensor = best_pred_reshape[net.keys[0]].squeeze()
+                final_pred_tensor = torch.round(final_pred_tensor).to(torch.uint8)
+                
+                if str(args.dimension).lower() == '2d':
+                    save_path_npy = os.path.join(out_path, f"{name}_Pred.npy")
+                    np.save(save_path_npy, final_pred_tensor.numpy())
+                else:
+                    save_nifti(
+                        final_pred_tensor,
+                        name=name+"_Pred",
+                        path_out_images=out_path + "/"
                     )
-                sample_stack(
-                    best_pred_reshape[net.keys[0]].squeeze(),
-                    #best_pred,
-                    title=name + "_Pred", 
-                    map="plasma", 
-                    show= args.show,
-                    path_out_images=args.path_prediction+args.model+"_"+args.dimension+"/"
+
+                if args.show:
+                    sample_stack(
+                        pred_data[net.keys[0]][0, 0, ...], 
+                        title=name, 
+                        show=args.show,
+                        path_out_images=out_path + "/"
                     )
-                save_nifti(
-                    best_pred_reshape[net.keys[0]].squeeze(),
-                    #best_pred,
-                    name=name+"_Pred",
-                    path_out_images=args.path_prediction+args.model+"_"+args.dimension+"/"
+                    sample_stack(
+                        final_pred_tensor,
+                        title=name + "_Pred", 
+                        map="plasma", 
+                        show=args.show,
+                        path_out_images=out_path + "/"
                     )
                 
                 #TODO CHANGE
