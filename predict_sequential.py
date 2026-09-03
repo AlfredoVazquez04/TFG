@@ -10,15 +10,33 @@ from utils import check_gpu_memory
 
 class SequentialPredictions:
 
-    models_2d = {} # TODO
-    models_3d = { 
-        'segformer': 25, 
-        'unet': 1, 
-        'vnet': 1, 
-        # 'segformer': 2, Different path
+    models_2d = {
+            'swin_unetr': 1,          
+            'unet': 1,                
+            'unetr': 1,               
+            'attention_unet': 1,      
+            'unet++': 1,                             
+            'segformer': 1,            
+            'unetr++': 1,             
+            'uxlstm': 1,              
+            'nnmamba': 1,             
+            'segmamba': 1,          
         }
     
-    dimensions = ['3d'] # '2d',
+    models_3d = { 
+            'swin_unetr': 1,          
+            'unet': 1,                
+            'unetr': 1,               
+            'attention_unet': 1,      
+            'unet++': 1,                           
+            'segformer': 1,            
+            'unetr++': 1,             
+            'uxlstm': 1,              
+            'nnmamba': 1 ,            
+            'segmamba': 1,              
+        }
+    
+    dimensions = ['2d'] # '2d/3d',
 
     len_battery_test = 17
     
@@ -38,7 +56,7 @@ class SequentialPredictions:
             for model in list(models.keys()):
                 
                 gpu_memory = check_gpu_memory() # Verify GPU memory
-                while gpu_memory < 12124:  # Wait until GPU memory is available  9124
+                while gpu_memory < 10024:  # Wait until GPU memory is available  9124
                     print("Need more GPU memory. Waiting...")
                     time.sleep(55)  
                     gpu_memory = check_gpu_memory()
@@ -72,12 +90,17 @@ class SequentialPredictions:
             dimension (str): Number of dimensions (2d or 3d)
             run_version (str): Version of the model
         """   
-        path = './resultsNew/'   
+        path = '/mnt/disco4t/alfredo/resultsNew/'   
         args = [
             '--mode', 'Predict',
+            '--dataset', 'amos22',
+            '--cache_rate', '0.0',
+            '--spatial_dims', '2',
+            '--out_channels', '16',
+            '--data_dir', '/mnt/disco4t/alfredo/data/amos22_2d',
+            '--roi_size', '512', '512', # 96x96x96 or 512x512
             '--model', model, 
             '--dimension', dimension,
-            '--run_version', run_version,
             '--path_prediction', path,
             ]
         

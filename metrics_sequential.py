@@ -1,101 +1,144 @@
-import subprocess
-import time
 import os
 import glob
 import json
-from datetime import datetime
-from multiprocessing import Process
-
-from metrics.classMetrics import (
-    RemovirtMetrics,
-    MetricResult,
-)
-
-from metrics.saveMetrics import SaveMetricsJson
-
-
+import numpy as np
+from metrics.classMetrics import RemovirtMetrics
 
 class SequentialMetrics:
-    models_2d = [] # TODO
-    models_3d = [
-        #'attention_unet',
-        'medformer', 
-        'resunet', 
+    """
+    Evaluates the performance of multiple 2D and 3D medical image segmentation models
+    sequentially, calculates clinical metrics (DSC, HD), and exports the results as JSON.
+    """
+    
+    models_2d = [
         'swin_unetr', 
-        'unet++', 
+        'unet', 
         'unetr', 
-        'vnet', 
-        'segformer'
-    ]
+        'attention_unet', 
+        'unet++',                             
+        'segformer', 
+        'unetr++', 
+        'uxlstm', 
+        'nnmamba', 
+        'segmamba'
+    ]    
 
-    models_3d = [ 
-        'segformer',
-        'unet',
-        'vnet', 
-    ]
+    models_3d = [
+        'swin_unetr', 
+        'unet', 
+        'unetr', 
+        'attention_unet', 
+        'unet++',                             
+        'segformer', 
+        'unetr++', 
+        'uxlstm', 
+        'nnmamba', 
+        'segmamba'
+    ]             
 
-    dimensions = 3
+    root_path = '/mnt/disco4t/alfredo/reconstructed_results'
+    gt_img_path = "/mnt/disco4t/alfredo/data/amos22/imagesVa/"
+    gt_lbl_path = "/mnt/disco4t/alfredo/data/amos22/labelsVa/"
+    name_dataset = 'amos22'
 
-    file_name = 'metricsNew.json'
-    root_path = './resultsNew/'
-    gt_img_path = "../../Datasets/BTCV_/imagesTs/"
-    gt_lbl_path = "../../Datasets/BTCV_/labelsTs/"
-
-    name_dataset = 'BTCV'
-
-    all_metrics = MetricResult.metrics
-
-    all_classes = [ '__BKG__','Spleen','Right Kidney','Left Kideny','Gallbladder',
-                'Esophagus','Liver', 'Stomach','Aorta','IVC','Portal and Splenic Veins',
-                'Pancreas','Right adrenal gland','Left adrenal gland']
-
-    def __load_from_file(self, path):
-        """Function to load the data from a file.
-
-        Args:
-            path (str): Path to the file.
-        """
-             
-        path = os.path.normpath(os.path.join(os.path.dirname(__file__), path))  
-        return path
+    all_classes = [
+        "background", "spleen", "right kidney", "left kidney", 
+        "gall bladder", "esophagus", "liver", "stomach", 
+        "arota", "postcava", "pancreas", "right adrenal gland", 
+        "left adrenal gland", "duodenum", "bladder", "prostate/uterus"
+    ]   
 
     def __call__(self):
+        """
+        Executes the evaluation pipeline for the defined 2D and 3D models.
+        Iterates over the reconstructed predictions, computes metrics against 
+        the ground truth, and accumulates the results.
+        """
         metrics = RemovirtMetrics(self.all_classes)
-        save_metrics = SaveMetricsJson()
-
         
-        for name_model in self.models_3d:
-            network_path = self.__load_from_file(os.path.join(self.root_path, name_model))
-            network_path += f"_{self.dimensions}d"
-            if os.path.exists(network_path):
-                for pred_filename in glob.glob(os.path.join(network_path, '*.nii.gz')):
+        execution_plan = [
+            (self.models_2d, 2, '.nii.gz'),
+            (self.models_3d, 3, '.nii.gz')
+        ]
+
+        for models, dimensions, ext in execution_plan:
+            for base_model_name in models:
+                full_model_name = f"{base_model_name}_{dimensions}d"
+                network_path = os.path.join(self.root_path, full_model_name)
+                
+                if not os.path.exists(network_path):
+                    print(f"Directory not found: {network_path}. Skipping...")
+                    continue
+
+                print(f"\n--- Evaluating Model: {full_model_name} ---")
+                
+                dataset_accumulator = {cls: {"DSC": [], "HD": []} for cls in self.all_classes}
+
+                for pred_filename in glob.glob(os.path.join(network_path, f'*{ext}')):
                     base_name_pred = os.path.basename(pred_filename)  
-                    name_pred_without_extension = os.path.splitext(base_name_pred)[0] 
-                    gt_name = name_pred_without_extension.split("_Pred")[0]  # Result: img0061
-                    lbl_name_with_extension = gt_name.replace("img", "label") + ".nii.gz"  # Result: label0061.nii.gz
-                    img_name_with_extension = gt_name + ".nii.gz"
                     
-                    results = metrics(
-                        [self.gt_img_path+img_name_with_extension, 
-                         self.gt_lbl_path+lbl_name_with_extension], 
-                         "."+self.root_path+name_model+f"_{self.dimensions}d/"+base_name_pred
-                        )
-                    print("Saving {} metrics of {}".format(name_model, gt_name))
-                    for name_metric in self.all_metrics:
-                        save_metrics(
-                            self.file_name,
-                            name_pred_without_extension.split(".nii")[0],
-                            gt_name,
-                            self.dimensions,
-                            self.name_dataset,
-                            name_model,
-                            name_metric,
-                            self.all_classes,
-                            results.results
+                    gt_name = base_name_pred.replace("_Pred", "").replace(ext, "")
+                    
+                    img_path = os.path.join(self.gt_img_path, f"{gt_name}{ext}")
+                    lbl_path = os.path.join(self.gt_lbl_path, f"{gt_name}{ext}")
+                    
+                    if not os.path.exists(lbl_path):
+                        print(f"Label not found for {gt_name}. Skipping...")
+                        continue
 
-                        )
+                    print(f"Calculating metrics for {gt_name}...")
+                    
+                    try:
+                        results = metrics([img_path, lbl_path], pred_filename)
+                        
+                        for cls_name, cls_metrics in results.results.items():
+                            if cls_metrics.get("DSC") is not None:
+                                dataset_accumulator[cls_name]["DSC"].append(cls_metrics["DSC"])
+                            if cls_metrics.get("HD") is not None:
+                                dataset_accumulator[cls_name]["HD"].append(cls_metrics["HD"])
+                    
+                    except Exception as e:
+                        print(f"Error processing {gt_name}: {e}")
 
+                self._save_professional_summary(full_model_name, dimensions, dataset_accumulator)
 
+    def _save_professional_summary(self, model_name, dimensions, accumulator):
+        """
+        Calculates the mean and standard deviation of the computed metrics 
+        across the entire dataset and saves a formatted JSON summary.
+        
+        Args:
+            model_name (str): The full name of the evaluated model.
+            dimensions (int): The spatial dimension of the model (2 or 3).
+            accumulator (dict): Dictionary containing the accumulated metric values.
+        """
+        summary = {
+            "dataset": self.name_dataset,
+            "model": model_name,
+            "dimensions": f"{dimensions}D",
+            "metrics_summary": {}
+        }
+
+        for cls_name, metrics in accumulator.items():
+            summary["metrics_summary"][cls_name] = {}
+            
+            for metric_name in ["DSC", "HD"]:
+                values = metrics[metric_name]
+                if values:
+                    summary["metrics_summary"][cls_name][metric_name] = {
+                        "mean": float(np.mean(values)),
+                        "std": float(np.std(values)),
+                        "count": len(values),
+                        "raw_values": [float(v) for v in values]
+                    }
+                else:
+                    summary["metrics_summary"][cls_name][metric_name] = None
+
+        output_file = f"jsons/metrics_{model_name.upper()}.json"
+        with open(output_file, 'w') as f:
+            json.dump(summary, f, indent=4)
+        
+        print(f"Summary for {model_name} successfully saved in: {output_file}")
 
 if __name__ == "__main__":
     SequentialMetrics()()
