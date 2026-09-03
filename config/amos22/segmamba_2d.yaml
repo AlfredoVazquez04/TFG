@@ -2,6 +2,7 @@ model: 'segmamba'
 
 in_chans: 1
 out_chans: 16
+roi_size: [256, 256]
 depths: [2, 2, 2, 2]
 feat_size: [48, 96, 192, 384]
 num_workers: 0
