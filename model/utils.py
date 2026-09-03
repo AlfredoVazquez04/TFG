@@ -203,7 +203,6 @@ def get_model(args, pretrain=False):
                 number_classes=args.number_classes,
             )
         
-    # 2D MODEL BELOW ↓    
     elif args.dimension == '2d':
 
         if args.model == 'swin_unetr':

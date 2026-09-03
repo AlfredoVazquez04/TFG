@@ -286,5 +286,6 @@ class AttentionUnet(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.contiguous()
         x_m: torch.Tensor = self.model(x)
         return x_m
